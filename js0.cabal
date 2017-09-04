@@ -16,7 +16,24 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Lang.JS0.AST
+                       Lang.JS0.Parser
+                       Lang.JS0.Prelude
+
   build-depends:       base >= 4.7 && < 5
+                     , aeson
+                     , bytestring
+                     , containers
+                     , directory            >= 1.1
+                     , filepath
+                     , hxt-regex-xmlschema  >= 9.2
+                     , hxt-unicode          >= 9.0
+                     , lens
+                     , megaparsec           >= 6
+                     , scientific           >= 0.3
+                     , text
+                     , utf8-string          >= 1
+                     , vector               >= 0.10
+
   default-language:    Haskell2010
 
 executable js0
@@ -25,6 +42,8 @@ executable js0
   ghc-options:         -Wall -fwarn-tabs -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , js0
+                     , optparse-applicative
+
   default-language:    Haskell2010
 
 test-suite simple-test
