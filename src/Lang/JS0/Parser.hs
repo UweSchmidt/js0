@@ -3,6 +3,9 @@
 module Lang.JS0.Parser
 where
 
+import Data.Char
+import Data.Scientific
+
 import Lang.JS0.Prelude
 import Lang.JS0.AST
 
@@ -29,8 +32,8 @@ lexeme = L.lexeme sc
 symbol :: Text -> Parser Text
 symbol = L.symbol sc
 
-rword :: Text -> Parser ()
-rword w = lexeme (string w *> notFollowedBy alphaNumChar)
+keyword :: Text -> Parser ()
+keyword w = lexeme (string w *> notFollowedBy nameChar)
 
 rws :: [Text] -- list of reserved words
 rws =
@@ -52,16 +55,341 @@ rws =
   , "while", "with"
   ]
 
-identifier :: Parser Text
-identifier = (lexeme . try) (p >>= check)
+kw'abstract
+  , kw'boolean, kw'break, kw'byte
+  , kw'case, kw'catch, kw'char, kw'class, kw'const, kw'continue
+  , kw'debugger, kw'default, kw'delete, kw'do, kw'double
+  , kw'else, kw'enum, kw'export, kw'extends
+  , kw'false, kw'final, kw'finally, kw'float, kw'for, kw'function
+  , kw'goto
+  , kw'if, kw'implements, kw'import, kw'in, kw'instanceof, kw'int, kw'interface
+  , kw'long
+  , kw'native, kw'new, kw'null
+  , kw'package, kw'private, kw'protected, kw'public
+  , kw'return
+  , kw'short, kw'static, kw'super, kw'switch, kw'synchronized
+  , kw'this, kw'throw, kw'throws, kw'transient, kw'true, kw'try, kw'typeof
+  , kw'var, kw'volatile, kw'void
+  , kw'while, kw'with
+  :: Parser ()
+
+[ kw'abstract
+  , kw'boolean, kw'break, kw'byte
+  , kw'case, kw'catch, kw'char, kw'class, kw'const, kw'continue
+  , kw'debugger, kw'default, kw'delete, kw'do, kw'double
+  , kw'else, kw'enum, kw'export, kw'extends
+  , kw'false, kw'final, kw'finally, kw'float, kw'for, kw'function
+  , kw'goto
+  , kw'if, kw'implements, kw'import, kw'in, kw'instanceof, kw'int, kw'interface
+  , kw'long
+  , kw'native, kw'new, kw'null
+  , kw'package, kw'private, kw'protected, kw'public
+  , kw'return
+  , kw'short, kw'static, kw'super, kw'switch, kw'synchronized
+  , kw'this, kw'throw, kw'throws, kw'transient, kw'true, kw'try, kw'typeof
+  , kw'var, kw'volatile, kw'void
+  , kw'while, kw'with
+  ] = map keyword rws
+
+nameChar :: Parser Char
+nameChar = alphaNumChar <|> otherNameChar
+
+otherNameChar :: Parser Char
+otherNameChar = satisfy (\ x -> x == '_' || x == '$')
+
+name :: Parser Text
+name = (lexeme . try) (p >>= check)
   where
     p  :: Parser Text
     p  = do
-      s <- (:) <$> letterChar <*> many alphaNumChar
-      return $ s ^. isoText
+      c <- letterChar <|> otherNameChar
+      s <- many (alphaNumChar <|> otherNameChar)
+      return $ (c : s) ^. isoText
 
     check :: Text -> Parser Text
     check x =
       if x `elem` rws
       then fail $ "keyword " ++ show x ++ " isn't allowed as identifier"
       else return x
+
+numberLiteral :: Parser Scientific
+numberLiteral = L.scientific
+
+sQuote, dQuote :: Parser Char
+sQuote = satisfy (== '\'')
+dQuote = satisfy (== '"')
+
+anyLitChar :: (Char -> Bool) -> Parser Char
+anyLitChar q =
+  satisfy (\ x -> q x
+                  &&
+                  x /= '\\'
+                  &&
+                  not (isControl x)
+          )
+  <|>
+  ( char '\\'
+    >>
+    escapedChar
+  )
+
+escapedChar :: Parser Char
+escapedChar =
+  satisfy (\ x -> x == '"'
+                  ||
+                  x == '\''
+                  ||
+                  x == '\\'
+                  ||
+                  x == '/'
+          )
+  <|>
+  ( char 'b' >> return '\b' )
+  <|>
+  ( char 'f' >> return '\f' )
+  <|>
+  ( char 'n' >> return '\n' )
+  <|>
+  ( char 'r' >> return '\r' )
+  <|>
+  ( char 't' >> return '\t' )
+  <|>
+  hexDigits4
+
+hexDigits4 :: Parser Char
+hexDigits4 = do
+  c4 <- count 4 hexDigitChar
+  return $ toEnum $ foldl (\ r i -> r * 16 + i) 0 $ map digitToInt c4
+
+stringLiteral :: Parser Text
+stringLiteral = (^. isoText) <$> (singleQ <|> doubleQ)
+  where
+    singleQ = between sQuote sQuote $ many $ anyLitChar (/= '\'')
+    doubleQ = between dQuote dQuote $ many $ anyLitChar (/= '"')
+
+op'assign
+  , op'incr
+  , op'decr
+  , colon
+  , comma
+  , semicolon
+  , leftPar
+  , rightPar
+  , leftBracket
+  , rightBracket
+  , leftBrace
+  , rightBrace :: Parser ()
+[ op'assign
+  , op'incr
+  , op'decr
+  , dot
+  , colon
+  , comma
+  , semicolon
+  , leftPar
+  , rightPar
+  , leftBracket
+  , rightBracket
+  , leftBrace
+  , rightBrace
+  ] = map (void . symbol)
+      [ "=", "+=", "-="
+      , ".", ":", ",", ";"
+      , "(", ")", "[", "]", "{", "}"
+      ]
+
+-- ----------------------------------------
+--
+-- statement parser
+
+varStatements :: Parser [Stmt]
+varStatements = mconcat <$> many varStatement
+
+varStatement :: Parser [Stmt]
+varStatement = kw'var *> vars <* semicolon
+  where
+    vars = sepBy1 var1 comma
+    var1 = mkVarStmt <$> name <*> option mkNull (op'assign *> expression)
+
+statements :: Parser [Stmt]
+statements = many statement
+
+statement :: Parser Stmt
+statement =
+  labeledStatement
+  <|>
+  (expressionStatement <* semicolon)
+  <|>
+  disruptiveStatement
+  <|>
+  tryStatement
+  <|>
+  ifStatement
+  <|>
+  compoundStatement
+
+labeledStatement :: Parser Stmt
+labeledStatement =
+  mkLabelStmt <$> try (name <* colon) <*> compoundStatement
+
+disruptiveStatement :: Parser Stmt
+disruptiveStatement =
+  breakStatement
+  <|>
+  returnStatement
+  <|>
+  throwStatement
+
+breakStatement :: Parser Stmt
+breakStatement =
+  mkBreakStmt <$>
+  (kw'break *> optional name <* semicolon)
+
+returnStatement :: Parser Stmt
+returnStatement =
+  mkReturnStmt <$>
+  (kw'return *> optional expression <* semicolon)
+
+throwStatement :: Parser Stmt
+throwStatement =
+  mkThrowStmt <$>
+  (kw'throw *> expression)
+
+tryStatement :: Parser Stmt
+tryStatement =
+  mkTryStmt <$>
+  (kw'try *> block <* kw'catch) <*> (leftPar *> name <* rightPar) <*> block
+
+ifStatement :: Parser Stmt
+ifStatement =
+  mkIfStmt <$>
+  (kw'if *> parExpression) <*> thenPart <*> elsePart
+  where
+    thenPart = block
+    elsePart =
+      (kw'else *> (ifStatement <|> block))
+      <|>
+      pure (mkStmtSeq [])
+
+compoundStatement :: Parser Stmt
+compoundStatement =
+  switchStatement
+  <|>
+  whileStatement
+  <|>
+  forStatement
+  <|>
+  doStatement
+
+switchStatement :: Parser Stmt
+switchStatement = undefined
+
+whileStatement :: Parser Stmt
+whileStatement =
+  mkWhileStmt <$>
+  (kw'while *> parExpression) <*> block
+
+forStatement :: Parser Stmt
+forStatement = undefined
+
+doStatement :: Parser Stmt
+doStatement =
+  mkDoStmt <$>
+  (kw'do *> block <* kw'while) <*> (parExpression <* semicolon)
+
+block :: Parser Stmt
+block =
+  between leftBrace rightBrace (mkStmtSeq <$> statements)
+
+-- the grammar given in JavaScript: The Good Parts can't be parsed
+-- with a limited look ahead
+--
+-- the expression statement rule on page 14 is pretty tricky
+--
+-- example:
+-- x = f(42).y = 23   -- o.k.
+-- x = f(42)   = 23   -- wrong
+-- x = f(42)          -- o.k.
+
+expressionStatement :: Parser Stmt
+expressionStatement =
+  mkExprStmt <$>
+  ( deleteExpression
+    <|>
+    assignOrCall
+  )
+
+assignOrCall :: Parser Expr
+assignOrCall = do
+  lhs <- ident >>= selectors
+  if isRefinement lhs
+    then assignment lhs
+    else return lhs
+
+assignment :: Expr -> Parser Expr
+assignment lhs =
+  (op'incr *> (mkIncrExpr lhs <$> expression))
+  <|>
+  (op'decr *> (mkDecrExpr lhs <$> expression))
+  <|>
+  (op'assign *> (mkAssign lhs <$> assignment'))
+  where
+    assignment' =
+      try assignOrCall    -- backtracking necessary
+      <|>
+      expression
+
+-- ----------------------------------------
+
+expression :: Parser Expr
+expression =
+  (kw'null *> return mkNull)
+  <|>
+  deleteExpression
+
+parExpression :: Parser Expr
+parExpression = between leftPar rightPar expression
+
+deleteExpression :: Parser Expr
+deleteExpression =
+  mkDelExpr <$>
+  (kw'delete *> refinementExpression)
+
+refinementExpression :: Parser Expr
+refinementExpression =
+  expression >>= checkRefinement
+
+checkRefinement :: Expr -> Parser Expr
+checkRefinement e
+  | isRefinement e = return e
+  | otherwise      = fail "expression with refinement expected (expr.name or expr[expr])"
+
+selectors :: Expr -> Parser Expr
+selectors e =
+  (dot *> (mkDotExpr e <$> name) >>= selectors)
+  <|>
+  ((leftBracket *> (mkBoxExpr e <$> expression) <* rightBracket) >>= selectors)
+  <|>
+  ((leftPar *> (mkCallExpr e <$> sepBy expression comma) <* rightPar ) >>= selectors)
+  <|>
+  pure e
+
+ident :: Parser Expr
+ident = mkIdent <$> name
+
+expr0 :: Parser Expr
+expr0 =
+  ident
+  <|>
+  (mkStrLit <$> stringLiteral)
+  <|>
+  (mkNumLit <$> numberLiteral)
+  <|>
+  (kw'null *> pure mkNull)
+  <|>
+  (leftPar *> expression <* rightPar)
+
+expr1 :: Parser Expr
+expr1 = expr0 >>= selectors
+
+-- ----------------------------------------
