@@ -59,15 +59,27 @@ data Expr
   = NumLit Scientific
   | StrLit Text
   | NullLit
-  | Ident Name
-  | Assign Expr Expr
-  | IncrOp Expr Expr
-  | DecrOp Expr Expr
-  | DelOp Expr
-  | DotOp Expr Name
-  | BoxOp Expr Expr
-  | Call  Expr [Expr]
+  | Ident  Name
+  | Unary  UnaryOp Expr
+  | Binary BinaryOp Expr Expr
+  | Cond   Expr Expr Expr
+  | DotOp  Expr Name
+  | BoxOp  Expr Expr
+  | Call   Expr [Expr]
   deriving (Show)
+
+data UnaryOp
+  = Udelete | Unew | Utypeof | Uplus | Uminus | Unot
+  deriving (Eq, Ord, Show)
+
+data BinaryOp
+  = Bincr | Bdecr | Bassign
+  | Bmult | Bdiv  | Brem
+  | Badd  | Bsub
+  | Bge   | Ble   | Bgr   | Bls
+  | Beq   | Bne
+  | Band  | Bor
+  deriving (Eq, Ord, Show)
 
 mkNumLit :: Scientific -> Expr
 mkNumLit = NumLit
@@ -81,17 +93,74 @@ mkNull = NullLit
 mkIdent :: Name -> Expr
 mkIdent = Ident
 
+mkMult :: Expr -> Expr -> Expr
+mkMult = Binary Bmult
+
+mkDiv :: Expr -> Expr -> Expr
+mkDiv  = Binary Bdiv
+
+mkRem :: Expr -> Expr -> Expr
+mkRem  = Binary Brem
+
+mkAdd :: Expr -> Expr -> Expr
+mkAdd = Binary Badd
+
+mkSub :: Expr -> Expr -> Expr
+mkSub = Binary Bsub
+
+mkGE :: Expr -> Expr -> Expr
+mkGE = Binary Bge
+
+mkGR :: Expr -> Expr -> Expr
+mkGR = Binary Bgr
+
+mkLE :: Expr -> Expr -> Expr
+mkLE = Binary Ble
+
+mkLS :: Expr -> Expr -> Expr
+mkLS = Binary Bls
+
+mkEQ :: Expr -> Expr -> Expr
+mkEQ = Binary Beq
+
+mkNE :: Expr -> Expr -> Expr
+mkNE = Binary Bne
+
+mkAnd :: Expr -> Expr -> Expr
+mkAnd = Binary Band
+
+mkOr :: Expr -> Expr -> Expr
+mkOr = Binary Bor
+
+mkCond :: Expr -> Expr -> Expr -> Expr
+mkCond = Cond
+
 mkAssign :: Expr -> Expr -> Expr
-mkAssign = Assign
+mkAssign = Binary Bassign
 
 mkIncrExpr :: Expr -> Expr -> Expr
-mkIncrExpr = IncrOp
+mkIncrExpr = Binary Bincr
 
 mkDecrExpr :: Expr -> Expr -> Expr
-mkDecrExpr = DecrOp
+mkDecrExpr = Binary Bdecr
 
 mkDelExpr :: Expr -> Expr
-mkDelExpr = DelOp
+mkDelExpr = Unary Udelete
+
+mkNewExpr :: Expr -> Expr
+mkNewExpr = Unary Unew
+
+mkTypeofExpr :: Expr -> Expr
+mkTypeofExpr = Unary Utypeof
+
+mkUplus :: Expr -> Expr
+mkUplus = Unary Uplus
+
+mkUminus :: Expr -> Expr
+mkUminus = Unary Uminus
+
+mkNot :: Expr -> Expr
+mkNot = Unary Unot
 
 mkDotExpr :: Expr -> Name -> Expr
 mkDotExpr = DotOp
@@ -102,9 +171,17 @@ mkBoxExpr = BoxOp
 mkCallExpr :: Expr -> [Expr] -> Expr
 mkCallExpr = Call
 
+isLValue :: Expr -> Bool
+isLValue Ident{} = True
+isLValue e       = isRefinement e
+
 isRefinement :: Expr -> Bool
 isRefinement DotOp{} = True
 isRefinement BoxOp{} = True
 isRefinement _       = False
+
+isInvocation :: Expr -> Bool
+isInvocation Call{}  = True
+isInvocation _       = False
 
 -- ----------------------------------------

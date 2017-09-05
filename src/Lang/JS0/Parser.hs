@@ -170,15 +170,17 @@ stringLiteral = (^. isoText) <$> (singleQ <|> doubleQ)
 op'assign
   , op'incr
   , op'decr
+  , dot
   , colon
   , comma
   , semicolon
+  , qumark
   , leftPar
   , rightPar
   , leftBracket
   , rightBracket
   , leftBrace
-  , rightBrace :: Parser ()
+  , rightBrace :: Parser Text
 [ op'assign
   , op'incr
   , op'decr
@@ -186,15 +188,16 @@ op'assign
   , colon
   , comma
   , semicolon
+  , qumark
   , leftPar
   , rightPar
   , leftBracket
   , rightBracket
   , leftBrace
   , rightBrace
-  ] = map (void . symbol)
+  ] = map symbol
       [ "=", "+=", "-="
-      , ".", ":", ",", ";"
+      , ".", ":", ",", ";", "?"
       , "(", ")", "[", "]", "{", "}"
       ]
 
@@ -322,7 +325,7 @@ expressionStatement =
 assignOrCall :: Parser Expr
 assignOrCall = do
   lhs <- ident >>= selectors
-  if isRefinement lhs
+  if isLValue lhs
     then assignment lhs
     else return lhs
 
@@ -342,10 +345,7 @@ assignment lhs =
 -- ----------------------------------------
 
 expression :: Parser Expr
-expression =
-  (kw'null *> return mkNull)
-  <|>
-  deleteExpression
+expression = expr4
 
 parExpression :: Parser Expr
 parExpression = between leftPar rightPar expression
@@ -358,11 +358,19 @@ deleteExpression =
 refinementExpression :: Parser Expr
 refinementExpression =
   expression >>= checkRefinement
+  where
+    checkRefinement :: Expr -> Parser Expr
+    checkRefinement e
+      | isRefinement e = return e
+      | otherwise      = fail "expression with refinement expected (\"expr.name\" or \"expr[expr]\")"
 
-checkRefinement :: Expr -> Parser Expr
-checkRefinement e
-  | isRefinement e = return e
-  | otherwise      = fail "expression with refinement expected (expr.name or expr[expr])"
+invocationExpression :: Parser Expr
+invocationExpression =
+  expression >>= checkInvocation
+  where
+    checkInvocation e
+      | isInvocation e = return e
+      | otherwise      = fail "invocation expression expected (\"expr(args)\")"
 
 selectors :: Expr -> Parser Expr
 selectors e =
@@ -377,6 +385,7 @@ selectors e =
 ident :: Parser Expr
 ident = mkIdent <$> name
 
+-- literals, names and expressions enclosed in ( and )
 expr0 :: Parser Expr
 expr0 =
   ident
@@ -389,7 +398,63 @@ expr0 =
   <|>
   (leftPar *> expression <* rightPar)
 
+-- add selectors: field, index and call
 expr1 :: Parser Expr
 expr1 = expr0 >>= selectors
+
+-- add unary operators
+expr2 :: Parser Expr
+expr2 =
+  (mkUplus  <$> (symbol "+" *> notFollowedBy (char '=') *> expr2))
+  <|>
+  (mkUminus <$> (symbol "-" *> notFollowedBy (char '=') *> expr2))
+  <|>
+  (mkNot    <$> (symbol "!" *> notFollowedBy (char '=') *> expr2))
+  <|>
+  (mkTypeofExpr <$> (kw'typeof *> expr2))
+  <|>
+  (mkNewExpr <$> (kw'new *> invocationExpression))
+  <|>
+  deleteExpression
+  <|>
+  expr1
+
+-- add binary operators
+expr3 :: Parser Expr
+expr3 = makeExprParser expr2 operators
+
+operators :: [[Operator Parser Expr]]
+operators =
+  [ [ InfixL (mkMult <$ symbol "*")
+    , InfixL (mkDiv  <$ symbol "/")
+    , InfixL (mkRem  <$ symbol "%")
+    ]
+  , [ InfixL (mkAdd  <$ symbol "+")
+    , InfixL (mkSub  <$ symbol "-")
+    ]
+  , [ InfixL (mkGE   <$ symbol ">=")
+    , InfixL (mkGR   <$ symbol ">" )
+    , InfixL (mkLE   <$ symbol "<=")
+    , InfixL (mkLS   <$ symbol "<" )
+    ]
+  , [ InfixL (mkEQ   <$ symbol "===")
+    , InfixL (mkNE   <$ symbol "!==")
+    ]
+  , [ InfixR (mkAnd  <$ symbol "&&")
+    ]
+  , [ InfixR (mkOr   <$ symbol "||")
+    ]
+  ]
+
+-- add conditional expressions
+expr4 :: Parser Expr
+expr4 = do
+  e1 <- expr3
+  ( ( mkCond e1 <$>
+      (qumark *> expr3) <*> (colon *> expr4)
+    )
+    <|>
+    return e1
+    )
 
 -- ----------------------------------------
