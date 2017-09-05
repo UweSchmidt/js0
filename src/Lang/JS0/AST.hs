@@ -56,16 +56,18 @@ mkBreakStmt = BreakStmt
 -- ----------------------------------------
 
 data Expr
-  = NumLit Scientific
-  | StrLit Text
+  = NumLit  Double
+  | StrLit  Text
+  | BoolLit Bool
   | NullLit
-  | Ident  Name
-  | Unary  UnaryOp Expr
-  | Binary BinaryOp Expr Expr
-  | Cond   Expr Expr Expr
-  | DotOp  Expr Name
-  | BoxOp  Expr Expr
-  | Call   Expr [Expr]
+  | UndefLit
+  | Ident   Name
+  | Unary   UnaryOp Expr
+  | Binary  BinaryOp Expr Expr
+  | Cond    Expr Expr Expr
+  | DotOp   Expr Name
+  | BoxOp   Expr Expr
+  | Call    Expr [Expr]
   deriving (Show)
 
 data UnaryOp
@@ -81,7 +83,7 @@ data BinaryOp
   | Band  | Bor
   deriving (Eq, Ord, Show)
 
-mkNumLit :: Scientific -> Expr
+mkNumLit :: Double -> Expr
 mkNumLit = NumLit
 
 mkStrLit :: Text -> Expr
@@ -89,6 +91,9 @@ mkStrLit = StrLit
 
 mkNull :: Expr
 mkNull = NullLit
+
+mkUndef :: Expr
+mkUndef = UndefLit
 
 mkIdent :: Name -> Expr
 mkIdent = Ident

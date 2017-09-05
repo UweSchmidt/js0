@@ -46,11 +46,13 @@ rws =
   , "goto"
   , "if", "implements", "import", "in", "instanceof", "int", "interface"
   , "long"
+  , "NaN"
   , "native", "new", "null"
   , "package", "private", "protected", "public"
   , "return"
   , "short", "static", "super", "switch", "synchronized"
   , "this", "throw", "throws", "transient", "true", "try", "typeof"
+  , "undefined"
   , "var", "volatile", "void"
   , "while", "with"
   ]
@@ -64,11 +66,13 @@ kw'abstract
   , kw'goto
   , kw'if, kw'implements, kw'import, kw'in, kw'instanceof, kw'int, kw'interface
   , kw'long
+  , kw'NaN
   , kw'native, kw'new, kw'null
   , kw'package, kw'private, kw'protected, kw'public
   , kw'return
   , kw'short, kw'static, kw'super, kw'switch, kw'synchronized
   , kw'this, kw'throw, kw'throws, kw'transient, kw'true, kw'try, kw'typeof
+  , kw'undefined
   , kw'var, kw'volatile, kw'void
   , kw'while, kw'with
   :: Parser ()
@@ -82,11 +86,13 @@ kw'abstract
   , kw'goto
   , kw'if, kw'implements, kw'import, kw'in, kw'instanceof, kw'int, kw'interface
   , kw'long
+  , kw'NaN
   , kw'native, kw'new, kw'null
   , kw'package, kw'private, kw'protected, kw'public
   , kw'return
   , kw'short, kw'static, kw'super, kw'switch, kw'synchronized
   , kw'this, kw'throw, kw'throws, kw'transient, kw'true, kw'try, kw'typeof
+  , kw'undefined
   , kw'var, kw'volatile, kw'void
   , kw'while, kw'with
   ] = map keyword rws
@@ -112,8 +118,9 @@ name = (lexeme . try) (p >>= check)
       then fail $ "keyword " ++ show x ++ " isn't allowed as identifier"
       else return x
 
-numberLiteral :: Parser Scientific
-numberLiteral = L.scientific
+numberLiteral :: Parser Double
+numberLiteral =
+  L.scientific >>= return . toRealFloat
 
 sQuote, dQuote :: Parser Char
 sQuote = satisfy (== '\'')
@@ -233,7 +240,8 @@ statement =
 
 labeledStatement :: Parser Stmt
 labeledStatement =
-  mkLabelStmt <$> try (name <* colon) <*> compoundStatement
+  mkLabelStmt <$>
+  try (name <* colon) <*> compoundStatement
 
 disruptiveStatement :: Parser Stmt
 disruptiveStatement =
@@ -390,11 +398,11 @@ expr0 :: Parser Expr
 expr0 =
   ident
   <|>
-  (mkStrLit <$> stringLiteral)
+  literal
   <|>
-  (mkNumLit <$> numberLiteral)
+  (kw'null      *> pure mkNull)
   <|>
-  (kw'null *> pure mkNull)
+  (kw'undefined *> pure mkUndef)
   <|>
   (leftPar *> expression <* rightPar)
 
@@ -456,5 +464,20 @@ expr4 = do
     <|>
     return e1
     )
+
+-- ----------------------------------------
+
+literal :: Parser Expr
+literal =
+  (mkStrLit <$> stringLiteral)
+  <|>
+  (mkNumLit <$> numberLiteral)
+  <|>
+  (kw'NaN *> pure (mkNumLit $ 0.0/0.0))
+  <|>
+  objectLiteral
+
+objectLiteral :: Parser Expr
+objectLiteral = undefined
 
 -- ----------------------------------------
