@@ -174,8 +174,7 @@ stringLiteral = (^. isoText) <$> (singleQ <|> doubleQ)
     singleQ = between sQuote sQuote $ many $ anyLitChar (/= '\'')
     doubleQ = between dQuote dQuote $ many $ anyLitChar (/= '"')
 
-op'assign
-  , op'incr
+op'incr
   , op'decr
   , dot
   , colon
@@ -188,8 +187,8 @@ op'assign
   , rightBracket
   , leftBrace
   , rightBrace :: Parser Text
-[ op'assign
-  , op'incr
+
+[ op'incr
   , op'decr
   , dot
   , colon
@@ -203,10 +202,22 @@ op'assign
   , leftBrace
   , rightBrace
   ] = map symbol
-      [ "=", "+=", "-="
+      [  "+=", "-="
       , ".", ":", ",", ";", "?"
       , "(", ")", "[", "]", "{", "}"
       ]
+
+op'assign
+  , op'plus
+  , op'minus
+  , op'not :: Parser Text
+
+[ op'assign
+  , op'plus
+  , op'minus
+  , op'not
+  ] = map (\ s -> lexeme $ string s <* notFollowedBy (char '='))
+      [ "=", "+", "-", "!"]
 
 -- ----------------------------------------
 --
@@ -339,9 +350,9 @@ assignOrCall = do
 
 assignment :: Expr -> Parser Expr
 assignment lhs =
-  (op'incr *> (mkIncrExpr lhs <$> expression))
+  (op'incr   *> (mkIncr lhs <$> expression))
   <|>
-  (op'decr *> (mkDecrExpr lhs <$> expression))
+  (op'decr   *> (mkDecr lhs <$> expression))
   <|>
   (op'assign *> (mkAssign lhs <$> assignment'))
   where
@@ -360,7 +371,7 @@ parExpression = between leftPar rightPar expression
 
 deleteExpression :: Parser Expr
 deleteExpression =
-  mkDelExpr <$>
+  mkDelete <$>
   (kw'delete *> refinementExpression)
 
 refinementExpression :: Parser Expr
@@ -413,15 +424,15 @@ expr1 = expr0 >>= selectors
 -- add unary operators
 expr2 :: Parser Expr
 expr2 =
-  (mkUplus  <$> (symbol "+" *> notFollowedBy (char '=') *> expr2))
+  (mkUplus  <$> (op'plus  *> expr2))
   <|>
-  (mkUminus <$> (symbol "-" *> notFollowedBy (char '=') *> expr2))
+  (mkUminus <$> (op'minus *> expr2))
   <|>
-  (mkNot    <$> (symbol "!" *> notFollowedBy (char '=') *> expr2))
+  (mkNot    <$> (op'not   *> expr2))
   <|>
-  (mkTypeofExpr <$> (kw'typeof *> expr2))
+  (mkTypeof <$> (kw'typeof *> expr2))
   <|>
-  (mkNewExpr <$> (kw'new *> invocationExpression))
+  (mkNew    <$> (kw'new *> invocationExpression))
   <|>
   deleteExpression
   <|>
@@ -437,8 +448,8 @@ operators =
     , InfixL (mkDiv  <$ symbol "/")
     , InfixL (mkRem  <$ symbol "%")
     ]
-  , [ InfixL (mkAdd  <$ symbol "+")
-    , InfixL (mkSub  <$ symbol "-")
+  , [ InfixL (mkAdd  <$ op'plus )
+    , InfixL (mkSub  <$ op'minus)
     ]
   , [ InfixL (mkGE   <$ symbol ">=")
     , InfixL (mkGR   <$ symbol ">" )

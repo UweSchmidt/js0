@@ -1,7 +1,6 @@
 module Lang.JS0.AST
 where
 
-import Data.Scientific
 import Lang.JS0.Prelude
 
 type Name = Text
@@ -143,20 +142,20 @@ mkCond = Cond
 mkAssign :: Expr -> Expr -> Expr
 mkAssign = Binary Bassign
 
-mkIncrExpr :: Expr -> Expr -> Expr
-mkIncrExpr = Binary Bincr
+mkIncr :: Expr -> Expr -> Expr
+mkIncr = Binary Bincr
 
-mkDecrExpr :: Expr -> Expr -> Expr
-mkDecrExpr = Binary Bdecr
+mkDecr :: Expr -> Expr -> Expr
+mkDecr = Binary Bdecr
 
-mkDelExpr :: Expr -> Expr
-mkDelExpr = Unary Udelete
+mkDelete :: Expr -> Expr
+mkDelete = Unary Udelete
 
-mkNewExpr :: Expr -> Expr
-mkNewExpr = Unary Unew
+mkNew :: Expr -> Expr
+mkNew = Unary Unew
 
-mkTypeofExpr :: Expr -> Expr
-mkTypeofExpr = Unary Utypeof
+mkTypeof :: Expr -> Expr
+mkTypeof = Unary Utypeof
 
 mkUplus :: Expr -> Expr
 mkUplus = Unary Uplus
