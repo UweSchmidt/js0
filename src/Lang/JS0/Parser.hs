@@ -207,17 +207,24 @@ op'incr
       , "(", ")", "[", "]", "{", "}"
       ]
 
+-- these ops are prefixes of other ops
+-- so they need lookahead (notFollowedby)
+
 op'assign
   , op'plus
   , op'minus
-  , op'not :: Parser Text
+  , op'not
+  , op'eqRef
+  , op'neRef:: Parser Text
 
 [ op'assign
   , op'plus
   , op'minus
   , op'not
+  , op'eqRef
+  , op'neRef
   ] = map (\ s -> lexeme $ string s <* notFollowedBy (char '='))
-      [ "=", "+", "-", "!"]
+      [ "=", "+", "-", "!", "==", "!="]
 
 -- ----------------------------------------
 --
@@ -444,24 +451,26 @@ expr3 = makeExprParser expr2 operators
 
 operators :: [[Operator Parser Expr]]
 operators =
-  [ [ InfixL (mkMult <$ symbol "*")
-    , InfixL (mkDiv  <$ symbol "/")
-    , InfixL (mkRem  <$ symbol "%")
+  [ [ InfixL (mkMult  <$ symbol "*")
+    , InfixL (mkDiv   <$ symbol "/")
+    , InfixL (mkRem   <$ symbol "%")
     ]
-  , [ InfixL (mkAdd  <$ op'plus )
-    , InfixL (mkSub  <$ op'minus)
+  , [ InfixL (mkAdd   <$ op'plus )
+    , InfixL (mkSub   <$ op'minus)
     ]
-  , [ InfixL (mkGE   <$ symbol ">=")
-    , InfixL (mkGR   <$ symbol ">" )
-    , InfixL (mkLE   <$ symbol "<=")
-    , InfixL (mkLS   <$ symbol "<" )
+  , [ InfixL (mkGE    <$ symbol ">=")
+    , InfixL (mkGR    <$ symbol ">" )
+    , InfixL (mkLE    <$ symbol "<=")
+    , InfixL (mkLS    <$ symbol "<" )
     ]
-  , [ InfixL (mkEQ   <$ symbol "===")
-    , InfixL (mkNE   <$ symbol "!==")
+  , [ InfixL (mkEQ    <$ symbol "===")
+    , InfixL (mkNE    <$ symbol "!==")
+    , InfixL (mkEQref <$ op'eqRef)   -- "=="
+    , InfixL (mkNEref <$ op'neRef)   -- "!="
     ]
-  , [ InfixR (mkAnd  <$ symbol "&&")
+  , [ InfixR (mkAnd   <$ symbol "&&")
     ]
-  , [ InfixR (mkOr   <$ symbol "||")
+  , [ InfixR (mkOr    <$ symbol "||")
     ]
   ]
 
@@ -487,8 +496,21 @@ literal =
   (kw'NaN *> pure (mkNumLit $ 0.0/0.0))
   <|>
   objectLiteral
+  <|>
+  arrayLiteral
 
 objectLiteral :: Parser Expr
-objectLiteral = undefined
+objectLiteral =
+  between leftBrace rightBrace $
+  mkObjLit <$> keyVal `sepBy` comma
+  where
+    keyVal =
+      (,) <$>
+      (name <|> stringLiteral) <* colon <*> expression
+
+arrayLiteral :: Parser Expr
+arrayLiteral =
+  between leftBracket rightBracket $
+  mkArrLit <$> expression `sepBy` comma
 
 -- ----------------------------------------

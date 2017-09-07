@@ -58,6 +58,8 @@ data Expr
   = NumLit  Double
   | StrLit  Text
   | BoolLit Bool
+  | ObjLit  [(Text, Expr)]
+  | ArrLit  [Expr]
   | NullLit
   | UndefLit
   | Ident   Name
@@ -78,7 +80,7 @@ data BinaryOp
   | Bmult | Bdiv  | Brem
   | Badd  | Bsub
   | Bge   | Ble   | Bgr   | Bls
-  | Beq   | Bne
+  | Beq   | Bne   | Beqr  | Bner
   | Band  | Bor
   deriving (Eq, Ord, Show)
 
@@ -87,6 +89,12 @@ mkNumLit = NumLit
 
 mkStrLit :: Text -> Expr
 mkStrLit = StrLit
+
+mkObjLit :: [(Text, Expr)] -> Expr
+mkObjLit = ObjLit
+
+mkArrLit :: [Expr] -> Expr
+mkArrLit = ArrLit
 
 mkNull :: Expr
 mkNull = NullLit
@@ -129,6 +137,12 @@ mkEQ = Binary Beq
 
 mkNE :: Expr -> Expr -> Expr
 mkNE = Binary Bne
+
+mkEQref :: Expr -> Expr -> Expr
+mkEQref = Binary Beqr
+
+mkNEref :: Expr -> Expr -> Expr
+mkNEref = Binary Bner
 
 mkAnd :: Expr -> Expr -> Expr
 mkAnd = Binary Band
