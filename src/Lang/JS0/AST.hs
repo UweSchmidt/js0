@@ -75,6 +75,7 @@ data Expr
 
 data UnaryOp
   = Udelete | Unew | Utypeof | Uplus | Uminus | Unot
+  | PreIncr | PreDecr | PostIncr | PostDecr
   deriving (Eq, Ord, Show)
 
 data BinaryOp
@@ -169,6 +170,18 @@ mkIncr = Binary Bincr
 
 mkDecr :: Expr -> Expr -> Expr
 mkDecr = Binary Bdecr
+
+mkPreIncr :: Expr -> Expr
+mkPreIncr = Unary PreIncr
+
+mkPreDecr :: Expr -> Expr
+mkPreDecr = Unary PreDecr
+
+mkPostIncr :: Expr -> Expr
+mkPostIncr = Unary PostIncr
+
+mkPostDecr :: Expr -> Expr
+mkPostDecr = Unary PostDecr
 
 mkDelete :: Expr -> Expr
 mkDelete = Unary Udelete

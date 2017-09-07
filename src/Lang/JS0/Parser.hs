@@ -5,6 +5,7 @@ where
 
 import Data.Char
 import Data.Scientific
+import qualified Data.Text as T
 
 import Lang.JS0.Prelude
 import Lang.JS0.AST
@@ -192,57 +193,122 @@ regexLiteral = lexeme $
       m <- option mempty $ string "m"
       return $ g <> i <> m
 
-op'incr
-  , op'decr
-  , dot
-  , colon
-  , comma
-  , semicolon
-  , qumark
-  , leftPar
+leftPar
   , rightPar
   , leftBracket
   , rightBracket
   , leftBrace
   , rightBrace :: Parser Text
 
-[ op'incr
-  , op'decr
-  , dot
-  , colon
-  , comma
-  , semicolon
-  , qumark
-  , leftPar
+[ leftPar
   , rightPar
   , leftBracket
   , rightBracket
   , leftBrace
   , rightBrace
   ] = map symbol
-      [  "+=", "-="
-      , ".", ":", ",", ";", "?"
-      , "(", ")", "[", "]", "{", "}"
-      ]
+      [ "(", ")", "[", "]", "{", "}" ]
 
--- these ops are prefixes of other ops
--- so they need lookahead (notFollowedby)
+-- create op parsers and take care of
+-- operators which are prefixes of other ops, e.g. ! and !=, != and !==
 
-op'assign
-  , op'plus
-  , op'minus
-  , op'not
-  , op'eqRef
-  , op'neRef:: Parser Text
+opParsers :: [Text] -> [Parser Text]
+opParsers ops = map (opParser ops) ops
 
-[ op'assign
-  , op'plus
-  , op'minus
-  , op'not
-  , op'eqRef
+opParser :: [Text] -> Text -> Parser Text
+opParser ops o =
+  lexeme $ opp follow
+  where
+    opp :: [Char] -> Parser Text
+    opp fs
+      | null fs   = string o
+      | otherwise = try $ string o <* notFollowedBy (satisfy $ \ c -> any (== c) fs)
+
+    follow :: [Char]
+    follow = nub                       $  -- remove dublicates
+             map T.head                $  -- take the first char
+             filter (not . T.null)     $  -- T.null -> the op itself
+             map (T.drop $ T.length o) $  -- remove the prefix
+             filter (o `T.isPrefixOf`) $  -- take all ops with op as prefix
+             ops
+
+ops'js :: [Text]
+ops'js =
+  [ "!", "!=", "!=="
+  , "%"
+  , "&&"
+  , "*"
+  , "+", "++", "+="
+  , ","
+  , "-", "--", "-="
+  , "."
+  , "/"
+  , ":"
+  , ";"
+  , "<", "<="
+  , "=", "==", "==="
+  , ">", ">="
+  , "?"
+  , "||"
+  ]
+
+opParsers'js :: [Parser Text]
+opParsers'js@
+  [ op'not
   , op'neRef
-  ] = map (\ s -> lexeme $ string s <* notFollowedBy (char '='))
-      [ "=", "+", "-", "!", "==", "!="]
+  , op'ne
+  , op'rem
+  , op'and
+  , op'mult
+  , op'plus
+  , op'plusplus
+  , op'incr
+  , comma
+  , op'minus
+  , op'minusminus
+  , op'decr
+  , dot
+  , op'quot
+  , colon
+  , semicolon
+  , op'ls
+  , op'le
+  , op'assign
+  , op'eqRef
+  , op'eq
+  , op'gr
+  , op'ge
+  , qumark
+  , op'or
+  ] = opParsers ops'js
+
+colon
+  , comma
+  , dot
+  , op'and
+  , op'assign
+  , op'decr
+  , op'eq
+  , op'eqRef
+  , op'ge
+  , op'gr
+  , op'incr
+  , op'le
+  , op'ls
+  , op'minus
+  , op'minusminus
+  , op'mult
+  , op'ne
+  , op'neRef
+  , op'not
+  , op'or
+  , op'plus
+  , op'plusplus
+  , op'quot
+  , op'rem
+  , qumark
+  , semicolon
+    :: Parser Text
 
 -- ----------------------------------------
 --
@@ -462,46 +528,61 @@ expr1 = expr0 >>= selectors
 -- add unary operators
 expr2 :: Parser Expr
 expr2 =
-  (mkUplus  <$> (op'plus  *> expr2))
+  (mkUplus   <$> (op'plus  *> expr2))
   <|>
-  (mkUminus <$> (op'minus *> expr2))
+  (mkUminus  <$> (op'minus *> expr2))
   <|>
-  (mkNot    <$> (op'not   *> expr2))
+  (mkPreIncr <$> (op'plusplus *> expr2))
   <|>
-  (mkTypeof <$> (kw'typeof *> expr2))
+  (mkPreDecr <$> (op'minusminus *> expr2))
   <|>
-  (mkNew    <$> (kw'new *> invocationExpression))
+  (mkNot     <$> (op'not   *> expr2))
+  <|>
+  (mkTypeof  <$> (kw'typeof *> expr2))
+  <|>
+  (mkNew     <$> (kw'new *> invocationExpression))
   <|>
   deleteExpression
   <|>
   expr1
 
+expr2'5 :: Parser Expr
+expr2'5 =
+  expr2 >>= postfixOps
+  where
+    postfixOps e =
+      op'plusplus *> postfixOps (mkPostIncr e)
+      <|>
+      op'minusminus *> postfixOps (mkPostDecr e)
+      <|>
+      pure e
+
 -- add binary operators
 expr3 :: Parser Expr
-expr3 = makeExprParser expr2 operators
+expr3 = makeExprParser expr2'5 operators
 
 operators :: [[Operator Parser Expr]]
 operators =
-  [ [ InfixL (mkMult  <$ symbol "*")
-    , InfixL (mkDiv   <$ symbol "/")
-    , InfixL (mkRem   <$ symbol "%")
+  [ [ InfixL (mkMult  <$ op'mult)
+    , InfixL (mkDiv   <$ op'quot)
+    , InfixL (mkRem   <$ op'rem)
     ]
   , [ InfixL (mkAdd   <$ op'plus )
     , InfixL (mkSub   <$ op'minus)
     ]
-  , [ InfixL (mkGE    <$ symbol ">=")
-    , InfixL (mkGR    <$ symbol ">" )
-    , InfixL (mkLE    <$ symbol "<=")
-    , InfixL (mkLS    <$ symbol "<" )
+  , [ InfixL (mkGE    <$ op'ge)
+    , InfixL (mkGR    <$ op'gr)
+    , InfixL (mkLE    <$ op'le)
+    , InfixL (mkLS    <$ op'ls)
     ]
-  , [ InfixL (mkEQ    <$ symbol "===")
-    , InfixL (mkNE    <$ symbol "!==")
+  , [ InfixL (mkEQ    <$ op'eq)
+    , InfixL (mkNE    <$ op'ne)
     , InfixL (mkEQref <$ op'eqRef)   -- "=="
     , InfixL (mkNEref <$ op'neRef)   -- "!="
     ]
-  , [ InfixR (mkAnd   <$ symbol "&&")
+  , [ InfixR (mkAnd   <$ op'and)
     ]
-  , [ InfixR (mkOr    <$ symbol "||")
+  , [ InfixR (mkOr    <$ op'or)
     ]
   ]
 
