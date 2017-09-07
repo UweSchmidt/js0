@@ -60,6 +60,8 @@ data Expr
   | BoolLit Bool
   | ObjLit  [(Text, Expr)]
   | ArrLit  [Expr]
+  | RELit   Text Text
+  | FctLit  (Maybe Name) [Name] Stmt
   | NullLit
   | UndefLit
   | Ident   Name
@@ -95,6 +97,12 @@ mkObjLit = ObjLit
 
 mkArrLit :: [Expr] -> Expr
 mkArrLit = ArrLit
+
+mkRegexpLit :: Text -> Text -> Expr
+mkRegexpLit = RELit
+
+mkFctLit :: Maybe Name -> [Name] -> Stmt -> Expr
+mkFctLit = FctLit
 
 mkNull :: Expr
 mkNull = NullLit

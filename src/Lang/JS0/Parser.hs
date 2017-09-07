@@ -169,10 +169,28 @@ hexDigits4 = do
   return $ toEnum $ foldl (\ r i -> r * 16 + i) 0 $ map digitToInt c4
 
 stringLiteral :: Parser Text
-stringLiteral = (^. isoText) <$> (singleQ <|> doubleQ)
+stringLiteral = lexeme $ (^. isoText) <$> (singleQ <|> doubleQ)
   where
     singleQ = between sQuote sQuote $ many $ anyLitChar (/= '\'')
     doubleQ = between dQuote dQuote $ many $ anyLitChar (/= '"')
+
+regexLiteral :: Parser (Text, Text)
+regexLiteral = lexeme $
+  (,) <$>
+  slashQ <*> (modifier <* notFollowedBy nameChar)
+  where
+    slashQ :: Parser Text
+    slashQ = (^. isoText) <$>
+             (between slash slash $ many $ anyLitChar (/= '/'))
+      where
+        slash    = satisfy (== '/')
+
+    modifier :: Parser Text
+    modifier = do
+      g <- option mempty $ string "c"
+      i <- option mempty $ string "i"
+      m <- option mempty $ string "m"
+      return $ g <> i <> m
 
 op'incr
   , op'decr
@@ -230,8 +248,21 @@ op'assign
 --
 -- statement parser
 
+-- in JS: The Good Parts
+-- in the rule for "var statements" (page 10)
+-- function declarations are left out, theses are added
+-- by allowing function literals in the parser below
+--
+-- Another solution would be the extension of "expression statement" (page 14)
+-- by function literals
+
 varStatements :: Parser [Stmt]
-varStatements = mconcat <$> many varStatement
+varStatements =
+  mconcat <$>
+  many (varStatement <|> fctDeclaration)
+  where
+    fctDeclaration =
+      (:[]) . mkExprStmt <$> functionLiteral
 
 varStatement :: Parser [Stmt]
 varStatement = kw'var *> vars <* semicolon
@@ -489,15 +520,17 @@ expr4 = do
 
 literal :: Parser Expr
 literal =
-  (mkStrLit <$> stringLiteral)
+  (mkStrLit <$> stringLiteral)             -- "...." or '...'
   <|>
-  (mkNumLit <$> numberLiteral)
+  (uncurry mkRegexpLit <$> regexLiteral)   -- /.../g
   <|>
-  (kw'NaN *> pure (mkNumLit $ 0.0/0.0))
+  (mkNumLit <$> numberLiteral)             -- 123 or 1.2E3
   <|>
-  objectLiteral
+  (kw'NaN *> pure (mkNumLit $ 0.0/0.0))    -- not a number
   <|>
-  arrayLiteral
+  objectLiteral                            -- { abc : 123, ...}
+  <|>
+  arrayLiteral                             -- [7, 3, x, 1+2, ...]
 
 objectLiteral :: Parser Expr
 objectLiteral =
@@ -512,5 +545,18 @@ arrayLiteral :: Parser Expr
 arrayLiteral =
   between leftBracket rightBracket $
   mkArrLit <$> expression `sepBy` comma
+
+functionLiteral :: Parser Expr
+functionLiteral =
+  mkFctLit <$>
+  (kw'function *> optional name) <*> parameters <*> functionBody
+  where
+    parameters =
+      between leftPar rightPar $ sepBy name comma
+
+    functionBody =
+      mkFctBody <$> varStatements <*> statements
+      where
+        mkFctBody xs ys = mkStmtSeq $ xs ++ ys
 
 -- ----------------------------------------
