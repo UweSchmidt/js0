@@ -7,6 +7,7 @@ type Name = Text
 
 data Stmt
   = VarStmt    Name Expr
+  | FctStmt    Expr
   | LabelStmt  Name Stmt
   | ExprStmt   Expr
   | StmtSeq    [Stmt]
@@ -51,6 +52,9 @@ mkReturnStmt = ReturnStmt
 
 mkBreakStmt :: Maybe Name -> Stmt
 mkBreakStmt = BreakStmt
+
+mkFctStmt :: Expr -> Stmt
+mkFctStmt = FctStmt
 
 -- ----------------------------------------
 

@@ -47,7 +47,6 @@ rws =
   , "goto"
   , "if", "implements", "import", "in", "instanceof", "int", "interface"
   , "long"
-  , "NaN"
   , "native", "new", "null"
   , "package", "private", "protected", "public"
   , "return"
@@ -67,7 +66,6 @@ kw'abstract
   , kw'goto
   , kw'if, kw'implements, kw'import, kw'in, kw'instanceof, kw'int, kw'interface
   , kw'long
-  , kw'NaN
   , kw'native, kw'new, kw'null
   , kw'package, kw'private, kw'protected, kw'public
   , kw'return
@@ -87,7 +85,6 @@ kw'abstract
   , kw'goto
   , kw'if, kw'implements, kw'import, kw'in, kw'instanceof, kw'int, kw'interface
   , kw'long
-  , kw'NaN
   , kw'native, kw'new, kw'null
   , kw'package, kw'private, kw'protected, kw'public
   , kw'return
@@ -336,6 +333,11 @@ varStatement = kw'var *> vars <* semicolon
     vars = sepBy1 var1 comma
     var1 = mkVarStmt <$> name <*> option mkNull (op'assign *> expression)
 
+functionStatement :: Parser Stmt
+functionStatement =
+  mkFctStmt <$>
+  functionLiteral' (Just <$> name)
+
 statements :: Parser [Stmt]
 statements = many statement
 
@@ -525,6 +527,17 @@ expr0 =
 expr1 :: Parser Expr
 expr1 = expr0 >>= selectors
 
+expr1'5 :: Parser Expr
+expr1'5 =
+  expr1 >>= postfixOps
+  where
+    postfixOps e =
+      op'plusplus *> postfixOps (mkPostIncr e)
+      <|>
+      op'minusminus *> postfixOps (mkPostDecr e)
+      <|>
+      pure e
+
 -- add unary operators
 expr2 :: Parser Expr
 expr2 =
@@ -544,22 +557,11 @@ expr2 =
   <|>
   deleteExpression
   <|>
-  expr1
-
-expr2'5 :: Parser Expr
-expr2'5 =
-  expr2 >>= postfixOps
-  where
-    postfixOps e =
-      op'plusplus *> postfixOps (mkPostIncr e)
-      <|>
-      op'minusminus *> postfixOps (mkPostDecr e)
-      <|>
-      pure e
+  expr1'5
 
 -- add binary operators
 expr3 :: Parser Expr
-expr3 = makeExprParser expr2'5 operators
+expr3 = makeExprParser expr2 operators
 
 operators :: [[Operator Parser Expr]]
 operators =
@@ -584,6 +586,10 @@ operators =
     ]
   , [ InfixR (mkOr    <$ op'or)
     ]
+  , [ InfixR (mkAssign <$ op'assign)
+    , InfixR (mkIncr   <$ op'incr)
+    , InfixR (mkDecr   <$ op'decr)
+    ]
   ]
 
 -- add conditional expressions
@@ -607,8 +613,6 @@ literal =
   <|>
   (mkNumLit <$> numberLiteral)             -- 123 or 1.2E3
   <|>
-  (kw'NaN *> pure (mkNumLit $ 0.0/0.0))    -- not a number
-  <|>
   objectLiteral                            -- { abc : 123, ...}
   <|>
   arrayLiteral                             -- [7, 3, x, 1+2, ...]
@@ -628,9 +632,12 @@ arrayLiteral =
   mkArrLit <$> expression `sepBy` comma
 
 functionLiteral :: Parser Expr
-functionLiteral =
+functionLiteral = functionLiteral' (optional name)
+
+functionLiteral' :: Parser (Maybe Name) -> Parser Expr
+functionLiteral' optName =
   mkFctLit <$>
-  (kw'function *> optional name) <*> parameters <*> functionBody
+  (kw'function *> optName) <*> parameters <*> functionBody
   where
     parameters =
       between leftPar rightPar $ sepBy name comma

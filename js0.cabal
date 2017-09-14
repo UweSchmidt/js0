@@ -18,7 +18,8 @@ library
   exposed-modules:     Lang.JS0.AST
                        Lang.JS0.Parser
                        Lang.JS0.Prelude
-
+                       Lang.JS0.Value
+                       
   build-depends:       base >= 4.7 && < 5
                      , aeson
                      , bytestring
