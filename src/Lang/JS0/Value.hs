@@ -7,6 +7,8 @@ where
 import Lang.JS0.Prelude
 import Data.IntMap (IntMap)
 
+import qualified Data.Map as M
+
 -- ----------------------------------------
 
 data JSValue
@@ -28,10 +30,17 @@ newtype CodeRef = CodeRef { unCodeRef :: Int }
 newtype JSObj = JSObj { _jsObj :: Map Text JSValue }
   deriving (Show)
 
-newtype JSObjStore = JSObjStore { _jsObjStore :: IntMap JSObj }
+data JSObjStore
+  = JSObjStore
+    { _jsObjStore :: ! (IntMap JSObj)
+    , _jsNewRef   :: ! Int
+    }
   deriving (Show)
 
 -- ----------------------------------------
+--
+-- operations on values
+
 
 -- prisms for JSValue
 
@@ -92,6 +101,14 @@ jsCodeRef = prism
   )
 
 -- ----------------------------------------
+--
+-- operations on objects
+
+instance Monoid JSObj where
+  mempty = JSObj M.empty
+
+  JSObj o1 `mappend` JSObj o2 =
+    JSObj $ M.union o2 o1  -- right operand wins
 
 -- lenses for JSObj
 
@@ -109,5 +126,50 @@ jsObjAt key = jsObjAt' key . isoUndef
         toM x           = Just x
         fromM Nothing   = JSUndefined
         fromM (Just x)  = x
+
+-- ----------------------------------------
+--
+-- the object store functions and lenses
+
+emptyJSObjStore :: JSObjStore
+emptyJSObjStore
+  = JSObjStore
+    { _jsObjStore = mempty
+    , _jsNewRef   = 1
+    }
+
+newJSObj :: JSObjStore -> (JSObjStore, Ref)
+newJSObj os =
+  (newOs, newRef)
+  where
+    newRef = os ^. jsNewRef
+    newOs  = os & jsObjStoreAt newRef .~ mempty
+                & jsNewRef            +~ 1
+
+jsObjStore :: Lens' JSObjStore (IntMap JSObj)
+jsObjStore k os =
+  (\ new -> os {_jsObjStore = new}) <$> k (_jsObjStore os)
+
+jsNewRef :: Lens' JSObjStore Ref
+jsNewRef k os =
+  (\ new -> os {_jsNewRef = unRef new}) <$> k (Ref $ _jsNewRef os)
+
+jsObjStoreAt :: Ref -> Lens' JSObjStore JSObj
+jsObjStoreAt ref =
+  jsObjStore . at (unRef ref) . checkJust ("jsObjStoreAt: undefined ref " ++ show ref)
+  where
+    checkJust :: String -> Iso' (Maybe a) a
+    checkJust msg = iso (fromMaybe (error msg)) Just
+    {-# INLINE checkJust #-}
+
+-- access a field of an object, return Nothing if field is not there
+
+jsField' :: Ref -> Text -> Lens' JSObjStore (Maybe JSValue)
+jsField' ref key = jsObjStoreAt ref . jsObjAt' key
+
+-- access a field of an object, return JSUndefined
+
+jsField :: Ref -> Text -> Lens' JSObjStore JSValue
+jsField ref key = jsObjStoreAt ref . jsObjAt key
 
 -- ----------------------------------------
