@@ -1,5 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Lang.JS0.Value
 where
@@ -19,28 +20,24 @@ data JSValue
   | JSUndefined
   | JSNull
   | JSCodeRef   { _jsCodeRef :: CodeRef }
-  deriving (Show)
 
-newtype Ref = Ref { unRef :: Int }
-  deriving (Eq, Num, Show)
+newtype Ref     = Ref     { unRef     :: Int }
 
 newtype CodeRef = CodeRef { unCodeRef :: Int }
-  deriving (Eq, Num, Show)
 
-newtype JSObj = JSObj { _jsObj :: Map Text JSValue }
-  deriving (Show)
+newtype JSObj   = JSObj   { _jsObj    :: Map Text JSValue }
 
 data JSObjStore
   = JSObjStore
     { _jsObjStore :: ! (IntMap JSObj)
     , _jsNewRef   :: ! Int
     }
-  deriving (Show)
 
 -- ----------------------------------------
 --
 -- operations on values
 
+deriving instance Show JSValue
 
 -- prisms for JSValue
 
@@ -102,7 +99,23 @@ jsCodeRef = prism
 
 -- ----------------------------------------
 --
+-- operations on Ref and CodeRef
+
+deriving instance Eq   Ref
+deriving instance Num  Ref
+deriving instance Show Ref
+
+deriving instance Eq   CodeRef
+deriving instance Num  CodeRef
+deriving instance Show CodeRef
+
+-- ----------------------------------------
+
+-- ----------------------------------------
+--
 -- operations on objects
+
+deriving instance Show JSObj
 
 instance Monoid JSObj where
   mempty = JSObj M.empty
@@ -130,6 +143,8 @@ jsObjAt key = jsObjAt' key . isoUndef
 -- ----------------------------------------
 --
 -- the object store functions and lenses
+
+deriving instance Show JSObjStore
 
 emptyJSObjStore :: JSObjStore
 emptyJSObjStore
