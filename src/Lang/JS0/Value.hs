@@ -6,32 +6,76 @@ module Lang.JS0.Value
 where
 
 import Lang.JS0.Prelude
+import Lang.JS0.BasicTypes
+
 import Data.IntMap (IntMap)
 
 import qualified Data.Map as M
 
 -- ----------------------------------------
 
+-- type of machine values of the JS0 virtual machine
+
 data JSValue
-  = JSRef       { _jsRef    :: Ref    }
-  | JSString    { _jsString :: Text   }
-  | JSNumber    { _jsNumber :: Double }
-  | JSBool      { _jsBool   :: Bool   }
+  = JSRef       { _jsRef     :: Ref     }
+  | JSString    { _jsString  :: Text    }
+  | JSNumber    { _jsNumber  :: Number  }
+  | JSBool      { _jsBool    :: Bool    }
   | JSUndefined
   | JSNull
-  | JSCodeRef   { _jsCodeRef :: CodeRef }
+  | JSCodeRef   { _jsCodeRef :: CodeRef }  -- internal: reference of a code segment for a function
+  | JSPc        { _jsPc      :: Int     }  -- internal: offset into code segment
+
+
+-- object references, pointers into the global object store
+-- internally represented as Int's
 
 newtype Ref     = Ref     { unRef     :: Int }
 
-newtype CodeRef = CodeRef { unCodeRef :: Int }
 
-newtype JSObj   = JSObj   { _jsObj    :: Map Text JSValue }
+-- code references, every function is compiled into a code segment
+-- these segment are stored in the global CodeStore
+
+newtype CodeRef = CodeRef { unCodeRef :: Name }
+
+-- ----------------------------------------
+--
+-- a JS object is a map from keys to JSValue's
+-- There are 2 kinds of keys, the JavaScript keys represented by a string
+-- and a few internal keys, which are only accessed within the VM
+
+newtype JSObj   = JSObj   { _jsObj    :: Map JSKey JSValue }
+
+data JSKey
+  = Name   Text
+  | Hidden InternalKey
+
+data InternalKey
+                = KeyEnv | KeyCodeSeg | KeyThis | KeyPC | KeyProto
+
+-- ----------------------------------------
+--
+-- the global object store consists of a map from Ref's to objects,
+-- the map is implemented as an IntMap
+-- for generating new refs, there is a newRef counter
 
 data JSObjStore
   = JSObjStore
     { _jsObjStore :: ! (IntMap JSObj)
     , _jsNewRef   :: ! Int
     }
+
+
+-- ----------------------------------------
+-- operations on object keys
+
+deriving instance Eq   InternalKey
+deriving instance Ord  InternalKey
+deriving instance Show InternalKey
+
+deriving instance Eq   JSKey
+deriving instance Ord  JSKey
+deriving instance Show JSKey
 
 -- ----------------------------------------
 --
@@ -97,6 +141,14 @@ jsCodeRef = prism
             _           -> Left  x
   )
 
+jsPc :: Prism' JSValue Int
+jsPc = prism
+  JSPc
+  (\ x -> case x of
+            JSPc y -> Right y
+            _      -> Left  x
+  )
+
 -- ----------------------------------------
 --
 -- operations on Ref and CodeRef
@@ -106,10 +158,8 @@ deriving instance Num  Ref
 deriving instance Show Ref
 
 deriving instance Eq   CodeRef
-deriving instance Num  CodeRef
+deriving instance Ord  CodeRef
 deriving instance Show CodeRef
-
--- ----------------------------------------
 
 -- ----------------------------------------
 --
@@ -125,12 +175,12 @@ instance Monoid JSObj where
 
 -- lenses for JSObj
 
-jsObjAt' :: Text -> Lens' JSObj (Maybe JSValue)
+jsObjAt' :: JSKey -> Lens' JSObj (Maybe JSValue)
 jsObjAt' key = isoJsObj . at key
   where
     isoJsObj = iso _jsObj JSObj
 
-jsObjAt :: Text -> Lens' JSObj JSValue
+jsObjAt :: JSKey -> Lens' JSObj JSValue
 jsObjAt key = jsObjAt' key . isoUndef
   where
     isoUndef = iso fromM toM
@@ -177,14 +227,38 @@ jsObjStoreAt ref =
     checkJust msg = iso (fromMaybe (error msg)) Just
     {-# INLINE checkJust #-}
 
--- access a field of an object, return Nothing if field is not there
+-- ----------------------------------------
+--
+-- lenses for access of fields of an object
 
-jsField' :: Ref -> Text -> Lens' JSObjStore (Maybe JSValue)
+jsField' :: Ref -> JSKey -> Lens' JSObjStore (Maybe JSValue)
 jsField' ref key = jsObjStoreAt ref . jsObjAt' key
 
 -- access a field of an object, return JSUndefined
 
-jsField :: Ref -> Text -> Lens' JSObjStore JSValue
-jsField ref key = jsObjStoreAt ref . jsObjAt key
+jsField :: JSKey -> Ref -> Lens' JSObjStore JSValue
+jsField key ref = jsObjStoreAt ref . jsObjAt key
+
+jsNamedField :: Text -> Ref -> Lens' JSObjStore JSValue
+jsNamedField name = jsField (Name name)
+
+jsHiddenField :: InternalKey -> Ref -> Lens' JSObjStore JSValue
+jsHiddenField intKey = jsField (Hidden intKey)
+
+jsThisField :: Ref -> Lens' JSObjStore JSValue
+jsThisField = jsHiddenField KeyThis
+
+jsProtoField :: Ref -> Lens' JSObjStore JSValue
+jsProtoField = jsHiddenField KeyProto
+
+jsEnvField :: Ref -> Lens' JSObjStore JSValue
+jsEnvField = jsHiddenField KeyEnv
+
+jsPCField :: Ref -> Lens' JSObjStore JSValue
+jsPCField = jsHiddenField KeyPC
+
+jsCodeSegField :: Ref -> Lens' JSObjStore JSValue
+jsCodeSegField = jsHiddenField KeyCodeSeg
+
 
 -- ----------------------------------------

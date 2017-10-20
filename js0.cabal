@@ -15,11 +15,14 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Lang.JS0.AST
+  exposed-modules:     Lang.JS0
+                       Lang.JS0.AST
+                       Lang.JS0.BasicTypes
+                       Lang.JS0.Instructions
                        Lang.JS0.Parser
                        Lang.JS0.Prelude
                        Lang.JS0.Value
-                       
+                                              
   build-depends:       base >= 4.7 && < 5
                      , aeson
                      , bytestring

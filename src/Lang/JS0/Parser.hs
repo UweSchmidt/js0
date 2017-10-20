@@ -8,6 +8,7 @@ import Data.Scientific
 import qualified Data.Text as T
 
 import Lang.JS0.Prelude
+import Lang.JS0.BasicTypes
 import Lang.JS0.AST
 
 import Text.Megaparsec

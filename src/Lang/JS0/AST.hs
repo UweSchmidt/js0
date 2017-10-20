@@ -2,8 +2,9 @@ module Lang.JS0.AST
 where
 
 import Lang.JS0.Prelude
+import Lang.JS0.BasicTypes
 
-type Name = Text
+-- ----------------------------------------
 
 data Stmt
   = VarStmt    Name Expr
@@ -76,20 +77,6 @@ data Expr
   | BoxOp   Expr Expr
   | Call    Expr [Expr]
   deriving (Show)
-
-data UnaryOp
-  = Udelete | Unew | Utypeof | Uplus | Uminus | Unot
-  | PreIncr | PreDecr | PostIncr | PostDecr
-  deriving (Eq, Ord, Show)
-
-data BinaryOp
-  = Bincr | Bdecr | Bassign
-  | Bmult | Bdiv  | Brem
-  | Badd  | Bsub
-  | Bge   | Ble   | Bgr   | Bls
-  | Beq   | Bne   | Beqr  | Bner
-  | Band  | Bor
-  deriving (Eq, Ord, Show)
 
 mkNumLit :: Double -> Expr
 mkNumLit = NumLit
