@@ -19,12 +19,13 @@ library
                        Lang.JS0.AST
                        Lang.JS0.BasicTypes
                        Lang.JS0.Instructions
+                       Lang.JS0.MachineState
                        Lang.JS0.Parser
                        Lang.JS0.Prelude
                        Lang.JS0.Value
                                               
-  build-depends:       base >= 4.7 && < 5
-                     , aeson
+  build-depends:       aeson
+                     , base >= 4.7 && < 5
                      , bytestring
                      , containers
                      , directory            >= 1.1
@@ -33,6 +34,7 @@ library
                      , hxt-unicode          >= 9.0
                      , lens
                      , megaparsec           >= 6
+                     , mtl >= 2.2.1
                      , scientific           >= 0.3
                      , text
                      , utf8-string          >= 1

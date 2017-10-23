@@ -15,6 +15,7 @@ module Lang.JS0.Prelude
        , Vector
        , IsEmpty(..)
        , IsString(..)
+       , Pretty(..)
          -- Data.Aeson
        , ToJSON(..)
        , FromJSON(..)
@@ -170,6 +171,18 @@ instance IsEmpty (Set a) where
 instance IsEmpty (Map k v) where
   isempty = M.null
   {-# INLINE isempty #-}
+
+-- ----------------------------------------
+
+class Pretty a where
+  pretty :: a -> String
+
+  default pretty :: (Show a) => a -> String
+  pretty = show
+  {-# INLINE pretty #-}
+
+instance Pretty Int
+instance Pretty Integer
 
 -- ----------------------------------------
 
