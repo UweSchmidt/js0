@@ -8,6 +8,7 @@ where
 
 import Lang.JS0.Prelude
 import Lang.JS0.BasicTypes
+import Lang.JS0.Instructions
 
 import qualified Data.IntMap as IM
 import qualified Data.Map    as M
@@ -25,6 +26,7 @@ data JSValue
   | JSNull
   | JSCodeRef   { _jsCodeRef :: ! CodeRef   }  -- internal: reference of a code segment for a function
   | JSPc        { _jsPc      :: ! Int       }  -- internal: offset into code segment
+  | JSCodeS     { _jsCseg    :: ! JSCodeSeg }  -- internal: code segment for cur fct
   | JSValues    { _jsValues  :: ! [JSValue] }  -- internal: for eval stack
 
 
@@ -81,12 +83,21 @@ data InternalKey
   | KeyPC           -- the program counter for current code segment
   | KeyEvalStack    -- the evaluation stack
 
+
+keyEnv
+  , keyThis, keyProto, keyCodeSeg, keyPC, keyEvalStack :: JSKey
+
+[keyEnv, keyThis, keyProto, keyCodeSeg, keyPC, keyEvalStack] =
+  map Hidden [minBound .. maxBound]
+
 -- ----------------------------------------
 -- operations on object keys
 
-deriving instance Eq   InternalKey
-deriving instance Ord  InternalKey
-deriving instance Show InternalKey
+deriving instance Eq      InternalKey
+deriving instance Ord     InternalKey
+deriving instance Show    InternalKey
+deriving instance Bounded InternalKey
+deriving instance Enum    InternalKey
 
 deriving instance Eq   JSKey
 deriving instance Ord  JSKey
@@ -162,6 +173,14 @@ jsPc = prism
   (\ x -> case x of
             JSPc y -> Right y
             _      -> Left  x
+  )
+
+jsCodeSeg :: Prism' JSValue JSCodeSeg
+jsCodeSeg = prism
+  JSCodeS
+  (\ x -> case x of
+            JSCodeS y -> Right y
+            _         -> Left  x
   )
 
 jsValues :: Prism' JSValue [JSValue]
@@ -272,6 +291,10 @@ isoObjStoreList = iso toL fromL
           os & jsObjStoreAt r .~ o
              & jsNewRef       %~ max r
 
+{-# INLINE jsObjStore #-}
+{-# INLINE jsNewRef #-}
+{-# INLINE jsObjStoreAt #-}
+
 -- ----------------------------------------
 --
 -- lenses for access of fields of an object
@@ -321,7 +344,7 @@ emptyJSCodeStore
   = JSCodeStore
     { _jsCodeStore = mempty }
 
-type JSCodeSeg = ()
+type JSCodeSeg = Vector JSInstr
 
 jsCodeStore :: Lens' JSCodeStore (Map CodeRef JSCodeSeg)
 jsCodeStore k cs =
@@ -341,5 +364,32 @@ jsCodeStoreAt ref =
 checkJust :: String -> Iso' (Maybe a) a
 checkJust msg = iso (fromMaybe (error msg)) Just
 {-# INLINE checkJust #-}
+
+-- ----------------------------------------
+
+isoListMaybe :: Iso' [a] (Maybe (a, [a]))
+isoListMaybe = iso toM fromM
+  where
+    toM []     = Nothing
+    toM (x:xs) = Just (x, xs)
+
+    fromM Nothing = []
+    fromM (Just (x, xs)) = x : xs
+
+topOfStack :: Lens' [a] a
+topOfStack =
+  isoListMaybe
+  . checkJust ("topOfStack: got empty stack" )
+  . _1
+
+popStack :: Lens' [a] [a]
+popStack =
+  isoListMaybe
+  . checkJust ("popStack: got empty stack")
+  . _2
+
+{-# INLINE isoListMaybe #-}
+{-# INLINE topOfStack #-}
+{-# INLINE popStack #-}
 
 -- ----------------------------------------

@@ -10,6 +10,7 @@ import Control.Monad.IO.Class
 
 import Lang.JS0.Prelude
 import Lang.JS0.BasicTypes
+import Lang.JS0.Instructions
 import Lang.JS0.Value
 
 -- ----------------------------------------
@@ -53,7 +54,35 @@ setField :: Ref -> Name -> JSValue -> Action ()
 setField ref name = setKey ref (Name name)
 
 setProto :: Ref -> JSValue -> Action ()
-setProto ref = setKey ref (Hidden KeyProto)
+setProto ref = setKey ref keyProto
+
+-- ----------------------------------------
+--
+-- micro instructions for program counter
+
+setPC :: Int -> Action ()
+setPC i = incrPC (const i)
+
+incrPC :: (Int -> Int) -> Action ()
+incrPC f = do
+  r <- use baseRef
+  fieldRef r keyPC . jsPc %= f
+
+getInstr :: Action JSInstr
+getInstr = do
+  r  <- use baseRef
+  pc <- checkPC <$> use (fieldRef r keyPC)
+  cs <- checkCS <$> use (fieldRef r keyCodeSeg)
+  return $ undefined cs pc
+  where
+    checkPC pc' =
+      fromMaybe (error "getInstr: PC does not contain an Int") $
+      pc' ^? jsPc
+
+    checkCS cs' = undefined
+
+
+-- ----------------------------------------
 
 -- ----------------------------------------
 
@@ -94,5 +123,25 @@ jsCode k st =
 jsData :: Lens' JSState JSObjStore
 jsData k st =
   (\ new -> st {_jsData = new}) <$> k (_jsData st)
+
+-- ----------------------------------------
+--
+-- compound lenses for JSState
+
+-- lens for a field of an object in the global object store
+
+fieldRef :: Ref -> JSKey -> Lens' JSState JSValue
+fieldRef ref key =
+  jsData . jsObjStoreAt ref . jsObjAt key
+
+fieldRef' :: Ref -> JSKey -> Lens' JSState (Maybe JSValue)
+fieldRef' ref key =
+  jsData . jsObjStoreAt ref . jsObjAt' key
+
+
+-- lens for the ref to the activation record of the current function
+
+baseRef :: Lens' JSState Ref
+baseRef = jsRTS . topOfStack
 
 -- ----------------------------------------
